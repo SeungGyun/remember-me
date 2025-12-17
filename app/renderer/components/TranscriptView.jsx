@@ -50,32 +50,57 @@ function TranscriptView({ meetingId, isLive }) {
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-4 bg-white rounded-lg shadow h-full border border-gray-200">
+        <div className="flex-1 overflow-y-auto p-6 bg-white h-full custom-scrollbar">
             {transcripts.length === 0 ? (
-                <p className="text-gray-400 text-center mt-10">대화 내용이 여기에 표시됩니다.</p>
+                <div className="flex flex-col items-center justify-center h-full opacity-50">
+                    <p className="text-slate-400">대화 내용이 시작되면 자동으로 기록됩니다.</p>
+                </div>
             ) : (
-                transcripts.map((t, i) => (
-                    <div key={i} className="mb-4">
-                        <div className="text-xs text-gray-500 mb-1">Speaker {t.speakerId || t.speaker_id || '?'}</div>
-                        <div className="bg-gray-50 p-3 rounded-lg text-gray-800">
-                            {editingId === t.id ? (
-                                <input
-                                    autoFocus
-                                    className="w-full bg-white border p-1"
-                                    defaultValue={t.text}
-                                    onBlur={(e) => handleSave(t.id, e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSave(t.id, e.currentTarget.value) }}
-                                />
-                            ) : (
-                                <span onClick={() => t.id && setEditingId(t.id)} className="cursor-pointer hover:bg-gray-100 block">
-                                    {t.text}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                ))
+                <div className="space-y-6">
+                    {transcripts.map((t, i) => {
+                        const isUserSpeaker = t.speakerId === 'Speaker 0'; // Just an example logic if we wanted to differentiate sides
+                        const speakerInitial = (t.speakerId || t.speaker_id || '?').replace('Speaker ', '')[0] || '?';
+                        const speakerName = t.speakerId || t.speaker_id || 'Unknown';
+
+                        return (
+                            <div key={i} className="flex gap-4 group">
+                                {/* Avatar */}
+                                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${['bg-indigo-100 text-indigo-600', 'bg-rose-100 text-rose-600', 'bg-amber-100 text-amber-600', 'bg-emerald-100 text-emerald-600'][Math.abs(speakerName.charCodeAt(speakerName.length - 1)) % 4]
+                                    }`}>
+                                    {speakerInitial}
+                                </div>
+
+                                <div className="flex-1 space-y-1">
+                                    <div className="flex items-baseline justify-between">
+                                        <div className="text-xs font-semibold text-slate-500">{speakerName}</div>
+                                        {/* <div className="text-[10px] text-slate-300">Timestamp</div> */}
+                                    </div>
+
+                                    <div className="prose prose-sm max-w-none text-slate-700">
+                                        {editingId === t.id ? (
+                                            <input
+                                                autoFocus
+                                                className="w-full bg-slate-50 border border-indigo-300 rounded p-2 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                                                defaultValue={t.text}
+                                                onBlur={(e) => handleSave(t.id, e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') handleSave(t.id, e.currentTarget.value) }}
+                                            />
+                                        ) : (
+                                            <span
+                                                onClick={() => t.id && setEditingId(t.id)}
+                                                className="block p-2 -ml-2 rounded-lg hover:bg-slate-50 cursor-text transition-colors border border-transparent hover:border-slate-100"
+                                            >
+                                                {t.text}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             )}
-            <div ref={bottomRef} />
+            <div ref={bottomRef} className="h-4" />
         </div>
     );
 }

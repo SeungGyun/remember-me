@@ -1,0 +1,38 @@
+{
+  "name": "remember-me",
+  "version": "1.0.0",
+  "main": "app/main.js",
+  "scripts": {
+    "start": "concurrently \"npm run dev\" \"npm run electron\"",
+    "dev": "vite",
+    "build": "npm run clean && vite build && node scripts/fix-index.js && electron-builder",
+    "clean": "rimraf dist renderer-dist",
+    "dist": "npm run build -- --win",
+    "setup:whisper": "node scripts/setup-whisper.js",
+    "setup:python": "node scripts/setup-python.js",
+    "setup:all": "npm run setup:whisper && npm run setup:python",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "node-record-lpcm16": "^1.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.22",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^26.0.12",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "vite": "^6.4.1"
+  }
+}

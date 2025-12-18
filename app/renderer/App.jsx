@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import TranscriptView from './components/TranscriptView';
 import SpeakerManager from './components/SpeakerManager';
 import MeetingList from './components/MeetingList';
+import AudioRecorder from './components/AudioRecorder';
 
 function App() {
     const [isRecording, setIsRecording] = useState(false);
     const [meetingTitle, setMeetingTitle] = useState('');
+    const [validationError, setValidationError] = useState(null);
     const [currentMeetingId, setCurrentMeetingId] = useState(null);
     const [showSpeakerManager, setShowSpeakerManager] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -20,12 +22,18 @@ function App() {
     }, []);
 
     const startMeeting = async () => {
-        if (!meetingTitle) return alert('회의 제목을 입력해주세요');
+        if (!meetingTitle.trim()) {
+            setValidationError('회의 제목을 입력해주세요');
+            return;
+        }
         if (window.api) {
             const res = await window.api.invoke('start-meeting', { title: meetingTitle, room: 'Default Room' });
             if (res.success) {
                 setIsRecording(true);
                 setCurrentMeetingId(res.meetingId);
+                // Clear title after start
+                setMeetingTitle('');
+                setValidationError(null);
             }
         }
     };
@@ -50,13 +58,13 @@ function App() {
             <MeetingList
                 onSelectMeeting={(id) => {
                     if (isRecording) {
-                        // Use a toast in future, for now alert is fine but let's try to be less intrusive if possible
                         alert('녹음 중에는 다른 회의를 볼 수 없습니다.');
                         return;
                     }
                     setCurrentMeetingId(id);
                 }}
                 currentMeetingId={currentMeetingId}
+                isRecording={isRecording}
             />
 
             <div className="flex-1 flex flex-col relative min-w-0">
@@ -90,35 +98,45 @@ function App() {
                         <div className="h-6 w-px bg-slate-200 hidden md:block mx-1"></div>
 
                         {!isRecording ? (
-                            <div className="flex gap-2 w-full md:w-auto">
-                                <input
-                                    type="text"
-                                    placeholder="새 회의 제목..."
-                                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm flex-1 md:w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                                    value={meetingTitle}
-                                    onChange={(e) => setMeetingTitle(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') startMeeting();
-                                    }}
-                                />
+                            <div className="flex gap-2 w-full md:w-auto items-start">
+                                <div className="pt-1">
+                                    <AudioRecorder isRecording={false} />
+                                </div>
+                                <div className="flex flex-col relative flex-1 md:w-64">
+                                    <input
+                                        type="text"
+                                        placeholder="새 회의 제목..."
+                                        className={`px-4 py-2 bg-white border ${validationError ? 'border-red-500 ring-1 ring-red-200' : 'border-slate-200'} rounded-xl text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm`}
+                                        value={meetingTitle}
+                                        onChange={(e) => {
+                                            setMeetingTitle(e.target.value);
+                                            if (validationError) setValidationError(null);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') startMeeting();
+                                        }}
+                                    />
+                                    {validationError && (
+                                        <div className="absolute top-full left-0 mt-1 text-xs text-red-500 font-medium pl-1">
+                                            {validationError}
+                                        </div>
+                                    )}
+                                </div>
                                 <button
                                     onClick={startMeeting}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 active:scale-95 transition-all whitespace-nowrap"
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 active:scale-95 transition-all whitespace-nowrap h-[38px]"
                                 >
                                     + 회의 시작
                                 </button>
                             </div>
                         ) : (
-                            <button
-                                onClick={stopMeeting}
-                                className="bg-rose-500 hover:bg-rose-600 text-white px-6 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 active:scale-95 transition-all animate-pulse whitespace-nowrap w-full md:w-auto flex items-center justify-center gap-2"
-                            >
-                                <span className="w-2 h-2 bg-white rounded-full animate-ping"></span>
-                                기록 중지
-                            </button>
+                            <AudioRecorder
+                                isRecording={true}
+                                onStop={stopMeeting}
+                            />
                         )}
 
-                        {currentMeetingId && (
+                        {currentMeetingId && !isRecording && (
                             <div className="flex gap-2 w-full md:w-auto justify-end md:ml-auto">
                                 <button
                                     onClick={() => setShowSpeakerManager(true)}

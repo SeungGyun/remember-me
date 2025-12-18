@@ -22,5 +22,6 @@ contextBridge.exposeInMainWorld('api', {
         if (validChannels.includes(channel)) {
             return ipcRenderer.invoke(channel, data);
         }
-    }
+    },
+    sendAudioData: (data) => ipcRenderer.send('audio-data', data)
 });

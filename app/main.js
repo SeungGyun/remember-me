@@ -7,6 +7,22 @@ const meetingRecorder = require('./modules/meeting-recorder');
 const isDev = !app.isPackaged;
 const logDir = path.join(path.dirname(process.execPath), 'logs');
 
+// Single Instance Lock
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Someone tried to run a second instance, we should focus our window.
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+}
+
 function log(message) {
     if (!fs.existsSync(logDir)) {
         try { fs.mkdirSync(logDir, { recursive: true }); } catch (e) { }
@@ -36,6 +52,34 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
         },
     });
+
+    // Permission handling for Microphone
+    win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+        log(`[Main] Permission check: ${permission} from ${requestingOrigin}`);
+        if (permission === 'media') {
+            return true;
+        }
+        return false;
+    });
+
+    win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+        log(`[Main] Permission request: ${permission}`);
+        if (permission === 'media') {
+            callback(true);
+            return;
+        }
+        callback(false);
+    });
+
+    // Check media access status (Windows/macOS)
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+        try {
+            const status = require('electron').systemPreferences.getMediaAccessStatus('microphone');
+            log(`[Main] System Microphone Access Status: ${status}`);
+        } catch (e) {
+            log(`[Main] Failed to get media access status: ${e.message}`);
+        }
+    }
 
     if (isDev) {
         log('Loading dev URL: http://localhost:3000');

@@ -5,18 +5,20 @@ const { app } = require('electron');
 let db;
 
 function initDatabase() {
-    const dbPath = path.join(app.getPath('userData'), 'database.sqlite');
-    db = new Database(dbPath);
+  const dbPath = path.join(app.getPath('userData'), 'database.sqlite');
+  db = new Database(dbPath);
 
-    // Initialize tables
-    db.exec(`
+  // Initialize tables
+  db.exec(`
     CREATE TABLE IF NOT EXISTS meetings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       room TEXT,
       start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-      end_time DATETIME
+      end_time DATETIME,
+      audio_path TEXT
     );
+
 
     CREATE TABLE IF NOT EXISTS participants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,10 +44,17 @@ function initDatabase() {
     );
   `);
 
-    return db;
+  // Migration for existing databases
+  try {
+    db.prepare('ALTER TABLE meetings ADD COLUMN audio_path TEXT').run();
+  } catch (e) {
+    // Column likely exists
+  }
+
+  return db;
 }
 
 module.exports = {
-    initDatabase,
-    getDb: () => db
+  initDatabase,
+  getDb: () => db
 };

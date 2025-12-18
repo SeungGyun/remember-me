@@ -1,4 +1,3 @@
-const audioCapture = require('./audio-capture');
 const whisperEngine = require('./whisper-engine');
 const pythonManager = require('./python-manager');
 const path = require('path');
@@ -10,7 +9,10 @@ class MeetingRecorder {
         this.isRecording = false;
         this.currentMeetingId = null;
         this.meetingStartTime = null;
-        this.tempFilePath = path.join(app.getPath('userData'), 'temp_recording.wav');
+        this.meetingStartTime = null;
+        this.fileWriteStream = null;
+        this.whisperStdin = null;
+        this.currentRecordingPath = null;
     }
 
     // Called from Main Process
@@ -21,6 +23,10 @@ class MeetingRecorder {
 
         ipcMain.handle('stop-meeting', async () => {
             return this.stop();
+        });
+
+        ipcMain.on('audio-data', (event, chunk) => {
+            this.handleAudioData(chunk);
         });
 
         ipcMain.handle('update-transcript', async (event, { id, text }) => {
@@ -96,25 +102,33 @@ class MeetingRecorder {
 
         try {
             const db = dbModule.getDb();
-            const stmt = db.prepare('INSERT INTO meetings (title, room) VALUES (?, ?)');
-            const info = stmt.run(title, room);
+            const stmt = db.prepare('INSERT INTO meetings (title, room, audio_path) VALUES (?, ?, ?)');
+
+            // Generate filename
+            const filename = `meeting-${Date.now()}.wav`;
+            const recordingPath = path.join(app.getPath('userData'), 'recordings', filename);
+
+            // Ensure directory exists
+            const fs = require('fs');
+            const dir = path.dirname(recordingPath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+
+            const info = stmt.run(title, room, recordingPath);
             this.currentMeetingId = info.lastInsertRowid;
             this.meetingStartTime = Date.now();
+            this.currentRecordingPath = recordingPath;
 
             this.isRecording = true;
 
-            // 1. Start Audio Capture (to file for reference/history)
-            audioCapture.start(this.tempFilePath);
+            // 1. Setup File Write Stream
+            this.fileWriteStream = fs.createWriteStream(recordingPath, { encoding: 'binary' });
 
             // 2. Start Whisper
-            const audioStream = audioCapture.recording.stream();
-            const whisperStdin = whisperEngine.start(null, (text) => {
+            this.whisperStdin = whisperEngine.start(null, (text) => {
                 this.handleTranscript(text);
             });
-
-            if (whisperStdin) {
-                audioStream.pipe(whisperStdin);
-            }
 
             // Notify Renderer
             this.broadcastStatus({ recording: true, meetingId: this.currentMeetingId });
@@ -126,22 +140,47 @@ class MeetingRecorder {
         }
     }
 
+    // New method to handle incoming audio chunks from Renderer
+    handleAudioData(chunk) {
+        if (!this.isRecording) return;
+
+        // Write to file
+        if (this.fileWriteStream) {
+            this.fileWriteStream.write(Buffer.from(chunk));
+        }
+
+        // Write to Whisper
+        if (this.whisperStdin) {
+            this.whisperStdin.write(Buffer.from(chunk));
+        }
+    }
+
     async stop() {
         if (!this.isRecording) return { success: false };
 
-        audioCapture.stop();
+        // Close streams
+        if (this.fileWriteStream) {
+            this.fileWriteStream.end();
+            this.fileWriteStream = null;
+        }
+
         whisperEngine.stop();
+        this.whisperStdin = null;
+
         this.isRecording = false;
-        const meetingId = this.currentMeetingId; // Store content for async op
+        const meetingId = this.currentMeetingId;
+        const recordingPath = this.currentRecordingPath;
+
         this.currentMeetingId = null;
         this.meetingStartTime = null;
+        this.currentRecordingPath = null;
 
         this.broadcastStatus({ recording: false, processing: true });
 
         // Run Diarization Async
         try {
-            console.log('Starting diarization...');
-            const segments = await pythonManager.runDiarization(this.tempFilePath);
+            console.log('Starting diarization on:', recordingPath);
+            const segments = await pythonManager.runDiarization(recordingPath);
             console.log('Diarization complete, segments:', segments.length);
             this.processDiarizationResults(meetingId, segments);
 

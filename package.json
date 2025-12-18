@@ -34,5 +34,35 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "vite": "^6.4.1"
+  },
+  "build": {
+    "appId": "com.rememberme.app",
+    "productName": "remember-me",
+    "extraResources": [
+      {
+        "from": "whisper",
+        "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "python-scripts",
+        "to": "python-scripts",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "python-runtime",
+        "to": "python-runtime",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    }
   }
 }

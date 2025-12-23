@@ -58,6 +58,19 @@ class MeetingRecorder {
             return db.prepare('SELECT * FROM transcripts WHERE meeting_id = ? ORDER BY start_time ASC').all(meetingId);
         });
 
+        // Search meetings by title or transcript content
+        ipcMain.handle('search-meetings', async (event, { query }) => {
+            const db = dbModule.getDb();
+            const searchTerm = `%${query}%`;
+            return db.prepare(`
+                SELECT DISTINCT m.* 
+                FROM meetings m
+                LEFT JOIN transcripts t ON m.id = t.meeting_id
+                WHERE m.title LIKE ? OR t.text LIKE ?
+                ORDER BY m.start_time DESC
+            `).all(searchTerm, searchTerm);
+        });
+
         ipcMain.handle('search-transcripts', async (event, { query }) => {
             const db = dbModule.getDb();
             return db.prepare('SELECT t.*, m.title as meeting_title FROM transcripts t JOIN meetings m ON t.meeting_id = m.id WHERE t.text LIKE ? ORDER BY t.created_at DESC').all(`%${query}%`);

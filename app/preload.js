@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld('api', {
         let validChannels = [
             'start-meeting', 'stop-meeting',
             'update-transcript', 'update-speaker', 'get-participants',
-            'get-meetings', 'get-transcripts', 'search-transcripts', 'export-meeting'
+            'get-meetings', 'get-transcripts', 'search-transcripts', 'export-meeting',
+            'search-meetings'
         ];
         if (validChannels.includes(channel)) {
             return ipcRenderer.invoke(channel, data);

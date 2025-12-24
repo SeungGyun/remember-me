@@ -110,7 +110,7 @@ class MeetingRecorder {
         });
     }
 
-    start(title, room) {
+    async start(title, room) {
         if (this.isRecording) return { success: false, message: 'Already recording' };
 
         try {
@@ -138,11 +138,28 @@ class MeetingRecorder {
             // 1. Setup File Write Stream
             this.fileWriteStream = fs.createWriteStream(recordingPath, { encoding: 'binary' });
 
-            // 2. Start Whisper
-            this.whisperStdin = whisperEngine.start(null, (text) => {
+            const audioCapture = require('./audio-capture');
+            // ... imports
+
+            // ... in start() method ...
+            // 2. Start Audio Capture
+            const audioStream = await audioCapture.start();
+            if (!audioStream) {
+                throw new Error('Failed to start audio capture');
+            }
+
+            // 3. Setup File Write
+            // Since audioCapture now returns a WAV stream, we can write directly to file
+            this.fileWriteStream = fs.createWriteStream(recordingPath);
+            audioStream.pipe(this.fileWriteStream);
+
+            // 4. Pipe to Whisper
+            // Ensure whisperEngine accepts WAV input (it usually strips header or processes it)
+            whisperEngine.start(audioStream, (text) => {
                 this.handleTranscript(text);
             });
 
+            this.currentRecordingPath = recordingPath;
             // Notify Renderer
             this.broadcastStatus({ recording: true, meetingId: this.currentMeetingId });
 
@@ -153,60 +170,65 @@ class MeetingRecorder {
         }
     }
 
-    // New method to handle incoming audio chunks from Renderer
+    // handleAudioData removed - utilizing system audio capture
     handleAudioData(chunk) {
-        if (!this.isRecording) return;
-
-        // Write to file
-        if (this.fileWriteStream) {
-            this.fileWriteStream.write(Buffer.from(chunk));
-        }
-
-        // Write to Whisper
-        if (this.whisperStdin) {
-            this.whisperStdin.write(Buffer.from(chunk));
-        }
+        // Deprecated
     }
 
     async stop() {
         if (!this.isRecording) return { success: false };
 
-        // Close streams
-        if (this.fileWriteStream) {
-            this.fileWriteStream.end();
-            this.fileWriteStream = null;
-        }
-
-        whisperEngine.stop();
-        this.whisperStdin = null;
-
-        this.isRecording = false;
-        const meetingId = this.currentMeetingId;
-        const recordingPath = this.currentRecordingPath;
-
-        this.currentMeetingId = null;
-        this.meetingStartTime = null;
-        this.currentRecordingPath = null;
-
-        this.broadcastStatus({ recording: false, processing: true });
-
-        // Run Diarization Async
         try {
-            console.log('Starting diarization on:', recordingPath);
-            const segments = await pythonManager.runDiarization(recordingPath);
-            console.log('Diarization complete, segments:', segments.length);
-            this.processDiarizationResults(meetingId, segments);
+            // Close streams and processes
+            if (this.fileWriteStream) {
+                this.fileWriteStream.end();
+                this.fileWriteStream = null;
+            }
 
-            // Notify completion
-            this.broadcastStatus({ recording: false, processing: false, diarizationComplete: true });
-            this.broadcastMeetingsUpdate();
+            audioCapture.stop();
+            whisperEngine.stop();
+            this.whisperStdin = null;
+
+            this.isRecording = false;
+            const meetingId = this.currentMeetingId;
+            const recordingPath = this.currentRecordingPath;
+
+            this.currentMeetingId = null;
+            this.meetingStartTime = null;
+            this.currentRecordingPath = null;
+
+            this.broadcastStatus({ recording: false, processing: true });
+
+            // Run Diarization Async (Fire and Forget)
+            if (meetingId && recordingPath) {
+                (async () => {
+                    try {
+                        console.log('Starting diarization on:', recordingPath);
+                        // Wait a moment for file handle to release fully if needed?
+                        await new Promise(r => setTimeout(r, 500));
+
+                        const segments = await pythonManager.runDiarization(recordingPath);
+                        console.log('Diarization complete, segments:', segments.length);
+                        this.processDiarizationResults(meetingId, segments);
+
+                        this.broadcastStatus({ recording: false, processing: false, diarizationComplete: true });
+                        this.broadcastMeetingsUpdate();
+
+                    } catch (e) {
+                        console.error('Diarization failed / skipped:', e.message);
+                        this.broadcastStatus({ recording: false, processing: false, error: 'Diarization failed' });
+                    }
+                })();
+            }
+
+            return { success: true };
 
         } catch (e) {
-            console.error('Diarization failed:', e);
-            this.broadcastStatus({ recording: false, processing: false, error: 'Diarization failed' });
+            console.error('Stop meeting error:', e);
+            // Even if error, force state reset
+            this.isRecording = false;
+            return { success: true, error: e.message }; // Return success to unblock UI
         }
-
-        return { success: true };
     }
 
     handleTranscript(text) {

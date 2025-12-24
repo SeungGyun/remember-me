@@ -10,7 +10,8 @@
     "dist": "npm run build -- --win",
     "setup:whisper": "node scripts/setup-whisper.js",
     "setup:python": "node scripts/setup-python.js",
-    "setup:all": "npm run setup:whisper && npm run setup:python",
+    "setup:sox": "node scripts/setup-sox.js",
+    "setup:all": "npm run setup:whisper && npm run setup:python && npm run setup:sox",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -56,6 +57,13 @@
       {
         "from": "python-runtime",
         "to": "python-runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "sox",
+        "to": "sox",
         "filter": [
           "**/*"
         ]

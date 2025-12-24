@@ -33,14 +33,24 @@ function App() {
                 // Clear title after start
                 setMeetingTitle('');
                 setValidationError(null);
+            } else {
+                console.error("Start meeting failed:", res.error);
+                alert("회의 시작 실패: " + (res.error || "알 수 없는 오류"));
             }
         }
     };
 
     const stopMeeting = async () => {
         if (window.api) {
-            await window.api.invoke('stop-meeting');
-            setIsRecording(false);
+            try {
+                await window.api.invoke('stop-meeting');
+            } catch (e) {
+                console.error("Stop meeting failed:", e);
+                alert("회의 종료 중 오류가 발생했습니다: " + e.message);
+            } finally {
+                // Always reset recording state to unblock UI
+                setIsRecording(false);
+            }
         }
     };
 

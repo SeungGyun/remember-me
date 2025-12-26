@@ -9,9 +9,10 @@
     "clean": "rimraf dist renderer-dist",
     "dist": "npm run build -- --win",
     "setup:whisper": "node scripts/setup-whisper.js",
+    "setup:ffmpeg": "node scripts/setup-ffmpeg.js",
     "setup:python": "node scripts/setup-python.js",
     "setup:sox": "node scripts/setup-sox.js",
-    "setup:all": "npm run setup:whisper && npm run setup:python && npm run setup:sox",
+    "setup:all": "npm run setup:ffmpeg && npm run setup:python && npm run setup:sox",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -64,6 +65,13 @@
       {
         "from": "sox",
         "to": "sox",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "ffmpeg",
+        "to": "ffmpeg",
         "filter": [
           "**/*"
         ]

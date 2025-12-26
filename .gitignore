@@ -141,3 +141,4 @@ vite.config.ts.timestamp-*
 renderer-dist/
 python-runtime/
 dist/
+electron-builder-cache/

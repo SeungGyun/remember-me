@@ -84,7 +84,16 @@ async function main() {
         execSync(`"${path.join(PYTHON_DIR, 'python.exe')}" -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu`);
 
         // Install pyannote.audio and other deps
-        execSync(`"${path.join(PYTHON_DIR, 'python.exe')}" -m pip install pyannote.audio onnxruntime`);
+        execSync(`"${path.join(PYTHON_DIR, 'python.exe')}" -m pip install pyannote.audio onnxruntime numpy openai-whisper`);
+
+        // 7. Fix distutils-precedence.pth issue in embedded python
+        // This file is often created by setuptools and conflicts with embedded python's site configuration
+        const sitePackages = path.join(PYTHON_DIR, 'Lib', 'site-packages');
+        const distutilsPth = path.join(sitePackages, 'distutils-precedence.pth');
+        if (fs.existsSync(distutilsPth)) {
+            console.log('Removing problematic distutils-precedence.pth...');
+            fs.unlinkSync(distutilsPth);
+        }
 
         console.log('Python setup complete.');
 

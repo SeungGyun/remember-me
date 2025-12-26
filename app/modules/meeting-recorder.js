@@ -1,4 +1,4 @@
-const whisperEngine = require('./whisper-engine');
+const ffmpegManager = require('./ffmpeg-manager');
 const pythonManager = require('./python-manager');
 const path = require('path');
 const { app, ipcMain } = require('electron');
@@ -9,9 +9,6 @@ class MeetingRecorder {
         this.isRecording = false;
         this.currentMeetingId = null;
         this.meetingStartTime = null;
-        this.meetingStartTime = null;
-        this.fileWriteStream = null;
-        this.whisperStdin = null;
         this.currentRecordingPath = null;
     }
 
@@ -25,8 +22,17 @@ class MeetingRecorder {
             return this.stop();
         });
 
+        ipcMain.handle('get-input-devices', async () => {
+            try {
+                return await ffmpegManager.getAudioDevices();
+            } catch (e) {
+                console.error('Failed to get devices:', e);
+                return [];
+            }
+        });
+
         ipcMain.on('audio-data', (event, chunk) => {
-            this.handleAudioData(chunk);
+            // Deprecated
         });
 
         ipcMain.handle('update-transcript', async (event, { id, text }) => {
@@ -110,10 +116,21 @@ class MeetingRecorder {
         });
     }
 
-    async start(title, room) {
+    async start(title, room, deviceName) {
         if (this.isRecording) return { success: false, message: 'Already recording' };
 
         try {
+            // Get device if not provided (default behavior)
+            if (!deviceName) {
+                const devices = await ffmpegManager.getAudioDevices();
+                if (devices.length > 0) {
+                    deviceName = devices[0].name;
+                    console.log('No device specified, using first found:', deviceName);
+                } else {
+                    throw new Error('No input devices found');
+                }
+            }
+
             const db = dbModule.getDb();
             const stmt = db.prepare('INSERT INTO meetings (title, room, audio_path) VALUES (?, ?, ?)');
 
@@ -135,67 +152,58 @@ class MeetingRecorder {
 
             this.isRecording = true;
 
-            // 1. Setup File Write Stream
-            this.fileWriteStream = fs.createWriteStream(recordingPath, { encoding: 'binary' });
-
-            const audioCapture = require('./audio-capture');
-            // ... imports
-
-            // ... in start() method ...
-            // 2. Start Audio Capture
-            const audioStream = await audioCapture.start();
-            if (!audioStream) {
-                throw new Error('Failed to start audio capture');
+            // Start Recording via FFmpegManager
+            try {
+                ffmpegManager.startRecording(deviceName, recordingPath, (text) => {
+                    this.handleTranscript(text);
+                });
+            } catch (videoError) {
+                console.error("FFmpeg Error", videoError);
+                throw videoError;
             }
 
-            // 3. Setup File Write
-            // Since audioCapture now returns a WAV stream, we can write directly to file
-            this.fileWriteStream = fs.createWriteStream(recordingPath);
-            audioStream.pipe(this.fileWriteStream);
-
-            // 4. Pipe to Whisper
-            // Ensure whisperEngine accepts WAV input (it usually strips header or processes it)
-            whisperEngine.start(audioStream, (text) => {
-                this.handleTranscript(text);
-            });
-
-            this.currentRecordingPath = recordingPath;
             // Notify Renderer
             this.broadcastStatus({ recording: true, meetingId: this.currentMeetingId });
 
             return { success: true, meetingId: this.currentMeetingId };
         } catch (e) {
             console.error('Failed to start meeting:', e);
+            this.isRecording = false; // Reset flag
             return { success: false, error: e.message };
         }
     }
 
-    // handleAudioData removed - utilizing system audio capture
-    handleAudioData(chunk) {
-        // Deprecated
-    }
 
     async stop() {
         if (!this.isRecording) return { success: false };
 
         try {
-            // Close streams and processes
-            if (this.fileWriteStream) {
-                this.fileWriteStream.end();
-                this.fileWriteStream = null;
-            }
+            // Stop recording (and wait for conversion)
+            await ffmpegManager.stopRecording();
 
-            audioCapture.stop();
-            whisperEngine.stop();
-            this.whisperStdin = null;
+            // Wait a bit more just in case
+            await new Promise(r => setTimeout(r, 500));
 
-            this.isRecording = false;
             const meetingId = this.currentMeetingId;
             const recordingPath = this.currentRecordingPath;
+
+            // Calculate duration
+            const endTime = Date.now();
+            const durationMs = endTime - this.meetingStartTime;
+            const durationSec = Math.round(durationMs / 1000);
+
+            const db = dbModule.getDb();
+            try {
+                db.prepare('UPDATE meetings SET end_time = ?, duration = ? WHERE id = ?')
+                    .run(new Date(endTime).toISOString(), durationSec, meetingId);
+            } catch (dbErr) {
+                console.error('Failed to update meeting duration:', dbErr);
+            }
 
             this.currentMeetingId = null;
             this.meetingStartTime = null;
             this.currentRecordingPath = null;
+            this.isRecording = false;
 
             this.broadcastStatus({ recording: false, processing: true });
 
@@ -203,15 +211,17 @@ class MeetingRecorder {
             if (meetingId && recordingPath) {
                 (async () => {
                     try {
-                        console.log('Starting diarization on:', recordingPath);
-                        // Wait a moment for file handle to release fully if needed?
-                        await new Promise(r => setTimeout(r, 500));
-
-                        const segments = await pythonManager.runDiarization(recordingPath);
-                        console.log('Diarization complete, segments:', segments.length);
-                        this.processDiarizationResults(meetingId, segments);
-
-                        this.broadcastStatus({ recording: false, processing: false, diarizationComplete: true });
+                        const fs = require('fs');
+                        if (fs.existsSync(recordingPath)) {
+                            console.log('Starting diarization on:', recordingPath);
+                            const segments = await pythonManager.runDiarization(recordingPath);
+                            console.log('Diarization complete, segments:', segments.length);
+                            this.processDiarizationResults(meetingId, segments);
+                            this.broadcastStatus({ recording: false, processing: false, diarizationComplete: true });
+                        } else {
+                            console.error('Recording file not found:', recordingPath);
+                            this.broadcastStatus({ recording: false, processing: false, error: 'Recording file missing' });
+                        }
                         this.broadcastMeetingsUpdate();
 
                     } catch (e) {
@@ -225,9 +235,8 @@ class MeetingRecorder {
 
         } catch (e) {
             console.error('Stop meeting error:', e);
-            // Even if error, force state reset
             this.isRecording = false;
-            return { success: true, error: e.message }; // Return success to unblock UI
+            return { success: false, error: e.message };
         }
     }
 

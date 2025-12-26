@@ -16,7 +16,8 @@ function initDatabase() {
       room TEXT,
       start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
       end_time DATETIME,
-      audio_path TEXT
+      audio_path TEXT,
+      duration INTEGER
     );
 
 
@@ -46,9 +47,18 @@ function initDatabase() {
 
   // Migration for existing databases
   try {
-    db.prepare('ALTER TABLE meetings ADD COLUMN audio_path TEXT').run();
+    const columns = db.prepare('PRAGMA table_info(meetings)').all();
+    const hasAudioPath = columns.some(c => c.name === 'audio_path');
+    const hasDuration = columns.some(c => c.name === 'duration');
+
+    if (!hasAudioPath) {
+      db.prepare('ALTER TABLE meetings ADD COLUMN audio_path TEXT').run();
+    }
+    if (!hasDuration) {
+      db.prepare('ALTER TABLE meetings ADD COLUMN duration INTEGER').run();
+    }
   } catch (e) {
-    // Column likely exists
+    console.error('Migration error:', e);
   }
 
   return db;

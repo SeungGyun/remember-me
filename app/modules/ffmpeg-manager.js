@@ -286,11 +286,31 @@ class FfmpegManager {
 
     async stopRecording() {
         console.log('Stopping recording...');
+
         return new Promise((resolve) => {
             if (this.ffmpegProcess) {
                 // Set resolve callback for when conversion finishes
                 this.onRecordingStopResolve = resolve;
-                this.ffmpegProcess.kill();
+
+                // Try graceful stop first
+                if (this.ffmpegProcess.stdin && this.ffmpegProcess.stdin.writable) {
+                    try {
+                        this.ffmpegProcess.stdin.write('q');
+                    } catch (e) {
+                        this.ffmpegProcess.kill();
+                    }
+                } else {
+                    this.ffmpegProcess.kill();
+                }
+
+                // Force kill if not exited in 2s
+                setTimeout(() => {
+                    if (this.ffmpegProcess) {
+                        console.log('Force killing FFmpeg after timeout');
+                        try { this.ffmpegProcess.kill(); } catch (e) { }
+                    }
+                }, 2000);
+
             } else {
                 resolve();
             }

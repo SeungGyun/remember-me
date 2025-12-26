@@ -10,6 +10,7 @@ function App() {
     const [validationError, setValidationError] = useState(null);
     const [currentMeetingId, setCurrentMeetingId] = useState(null);
     const [showSpeakerManager, setShowSpeakerManager] = useState(false);
+    const [isStopping, setIsStopping] = useState(false);
 
     useEffect(() => {
         if (window.api) {
@@ -43,6 +44,7 @@ function App() {
     const stopMeeting = async () => {
         if (window.api) {
             try {
+                setIsStopping(true);
                 await window.api.invoke('stop-meeting');
             } catch (e) {
                 console.error("Stop meeting failed:", e);
@@ -50,6 +52,7 @@ function App() {
             } finally {
                 // Always reset recording state to unblock UI
                 setIsRecording(false);
+                setIsStopping(false);
             }
         }
     };
@@ -125,6 +128,7 @@ function App() {
                             <AudioRecorder
                                 isRecording={true}
                                 onStop={stopMeeting}
+                                isStopping={isStopping}
                             />
                         )}
 

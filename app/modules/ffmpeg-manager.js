@@ -154,7 +154,8 @@ class FfmpegManager {
                 '-ac', '1',
                 '-ar', '16000',
                 // Apply volume amplification and split to two outputs
-                '-filter_complex', '[0:a]volume=4.0,asplit[file_out][stream_out]',
+                // Increased from 4.0 to 15.0 due to extremely low input volume
+                '-filter_complex', '[0:a]volume=15.0,asplit[file_out][stream_out]',
                 // Output 1: File (RAW PCM)
                 '-map', '[file_out]',
                 '-c:a', 'pcm_s16le',
@@ -295,7 +296,7 @@ class FfmpegManager {
                 // Try graceful stop first
                 if (this.ffmpegProcess.stdin && this.ffmpegProcess.stdin.writable) {
                     try {
-                        this.ffmpegProcess.stdin.write('q');
+                        this.ffmpegProcess.stdin.write('q\n');
                     } catch (e) {
                         this.ffmpegProcess.kill();
                     }
@@ -303,22 +304,20 @@ class FfmpegManager {
                     this.ffmpegProcess.kill();
                 }
 
-                // Force kill if not exited in 2s
+                // Force kill if not exited in 5s
                 setTimeout(() => {
                     if (this.ffmpegProcess) {
                         console.log('Force killing FFmpeg after timeout');
                         try { this.ffmpegProcess.kill(); } catch (e) { }
                     }
-                }, 2000);
+                }, 5000);
 
             } else {
                 resolve();
             }
 
-            // Ensure python is killed
-            if (this.pythonProcess) {
-                try { this.pythonProcess.kill(); } catch (e) { }
-            }
+            // DO NOT kill Python here immediately to avoid breaking the pipe before FFmpeg finishes.
+            // Python will exit when its stdin (FFmpeg stdout) closes.
         });
     }
 }

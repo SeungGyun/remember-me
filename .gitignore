@@ -142,3 +142,4 @@ renderer-dist/
 python-runtime/
 dist/
 electron-builder-cache/
+whisper/models/

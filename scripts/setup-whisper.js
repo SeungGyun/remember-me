@@ -15,9 +15,15 @@ const ZIP_PATH = path.join(WHISPER_DIR, 'whisper.zip');
 function downloadFile(url, dest) {
     return new Promise((resolve, reject) => {
         if (fs.existsSync(dest)) {
-            console.log(`File already exists: ${dest}`);
-            resolve();
-            return;
+            const stats = fs.statSync(dest);
+            if (stats.size > 1024) {
+                console.log(`File already exists: ${dest}`);
+                resolve();
+                return;
+            } else {
+                console.log(`File exists but is too small (${stats.size} bytes). Re-downloading...`);
+                fs.unlinkSync(dest);
+            }
         }
 
         console.log(`Downloading ${url} to ${dest}...`);

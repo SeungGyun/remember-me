@@ -154,8 +154,8 @@ class FfmpegManager {
                 '-ac', '1',
                 '-ar', '16000',
                 // Apply volume amplification and split to two outputs
-                // Increased from 4.0 to 15.0 due to extremely low input volume
-                '-filter_complex', '[0:a]volume=15.0,asplit[file_out][stream_out]',
+                // Decreased from 15.0 to 2.0 as it was too loud
+                '-filter_complex', '[0:a]volume=2.0,asplit[file_out][stream_out]',
                 // Output 1: File (RAW PCM)
                 '-map', '[file_out]',
                 '-c:a', 'pcm_s16le',
